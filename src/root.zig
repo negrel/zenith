@@ -1,10 +1,20 @@
+const builtin = @import("builtin");
 const std = @import("std");
-const testing = std.testing;
 
-export fn add(a: i32, b: i32) i32 {
-    return a + b;
+pub const options = @import("options");
+
+test {
+    _ = @import("./clock.zig");
+    _ = @import("./metrics.zig");
+    _ = @import("./Allocator.zig");
 }
 
-test "basic add functionality" {
-    try testing.expect(add(3, 7) == 10);
-}
+const hint = @import("./hint.zig");
+pub const blackBox = hint.blackBox;
+pub const blackHole = hint.blackHole;
+
+const bench = @import("./bench.zig");
+pub const microBench = bench.microBench;
+pub const MicroBenchmark = bench.MicroBenchmark;
+pub const MicroBenchFn = bench.MicroBenchFn;
+pub const M = bench.M;
