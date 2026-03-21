@@ -2,8 +2,8 @@ const std = @import("std");
 
 const hint = @import("hint.zig");
 
-/// Clock precision is the smallest nonzero time interval measurable by the
-/// timer.
+/// System clock precision (in nanoseconds) is the smallest nonzero time
+/// interval measurable.
 pub fn measurePrecision() std.time.Timer.Error!u64 {
     var min_sample: u64 = std.math.maxInt(u64);
     var seen_count: usize = 0;
@@ -46,7 +46,7 @@ pub fn measurePrecision() std.time.Timer.Error!u64 {
     }
 }
 
-/// Measure system clock precision and cache it globally.
+/// Measure system clock precision (in nanoseconds) and cache it globally.
 /// This function calls measurePrecision() behind the scene and panic on error.
 pub fn precision() u64 {
     const static = struct {

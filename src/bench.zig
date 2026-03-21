@@ -10,17 +10,17 @@ const clock = @import("./clock.zig");
 const Private = struct {
     iter: usize,
     metrics: metrics.Bench,
-    clock_prec: u64,
+    clock_prec_ns: u64,
 
     fn init(self: *Private) !void {
         self.iter = 0;
         try self.metrics.init();
-        self.clock_prec = clock.precision();
+        self.clock_prec_ns = clock.precision();
     }
 
     fn loop(self: *Private) bool {
         self.metrics.stop();
-        if (self.iter > 0 and self.metrics.time.sample.ns > 120 * self.clock_prec)
+        if (self.iter > 0 and self.metrics.time.sample.ns > 100 * self.clock_prec_ns)
             return false;
         self.iter += 1;
         self.metrics.start();
@@ -64,6 +64,7 @@ pub const MicroBenchFn = fn (*const M) void;
 pub const MicroBenchmark = struct {
     iter: usize,
     sample: metrics.Bench.Sample,
+    clock_prec_ns: u64,
 };
 
 /// Measure the performance of `ubench_fn` function. Micro benchmark are
@@ -85,6 +86,7 @@ pub fn microBench(ubench_fn: MicroBenchFn) !MicroBenchmark {
     var result: MicroBenchmark = .{
         .iter = std.math.maxInt(usize),
         .sample = metrics.Bench.Sample.max,
+        .clock_prec_ns = clock.precision(),
     };
 
     var total_duration_ns: usize = 0;
@@ -111,7 +113,11 @@ pub fn microBench(ubench_fn: MicroBenchFn) !MicroBenchmark {
         const sample = private.metrics.sample();
 
         if (sample.time.ns < result.sample.time.ns) {
-            result = .{ .sample = sample, .iter = private.iter };
+            result = .{
+                .sample = sample,
+                .iter = private.iter,
+                .clock_prec_ns = private.clock_prec_ns,
+            };
         }
 
         try std.testing.expectEqual(.ok, std.testing.allocator_instance.deinit());

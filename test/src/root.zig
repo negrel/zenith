@@ -38,8 +38,8 @@ fn microBenchFibIterative(m: *const zenith.M) void {
 
 test "zenith.microBench" {
     const rec = try zenith.microBench(microBenchFibRecursive);
-    std.debug.print("{D}\n", .{rec.sample.time.ns / rec.iter});
+    std.debug.print("{D} +- {D}\n", .{ rec.sample.time.ns / rec.iter, rec.sample.time.ns / rec.iter / 100 });
     std.debug.print("---\n", .{});
     const iter = try zenith.microBench(microBenchFibIterative);
-    std.debug.print("{D}\n", .{iter.sample.time.ns / iter.iter});
+    std.debug.print("{D} +- {D}\n", .{ iter.sample.time.ns / iter.iter, iter.sample.time.ns / iter.iter / 100 });
 }
