@@ -1,0 +1,17 @@
+.{
+    .name = .foo,
+    .version = "0.0.0",
+    .fingerprint = 0x8c7365217fdef45c,
+    .minimum_zig_version = "0.15.2",
+    .dependencies = .{
+        .zenith = .{ .path = "../" },
+    },
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+        // For example...
+        //"LICENSE",
+        //"README.md",
+    },
+}
