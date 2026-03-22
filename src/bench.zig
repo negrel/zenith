@@ -5,6 +5,7 @@ const options = @import("options");
 const Allocator = @import("./Allocator.zig");
 const metrics = @import("./metrics.zig");
 const clock = @import("./clock.zig");
+const HostInfo = @import("./HostInfo.zig");
 
 /// Private zenith data part of benchmark context.
 const Private = struct {
@@ -72,7 +73,7 @@ pub const MicroBenchmark = struct {
 /// with an execution time in the range of few nanoseconds to hundred
 /// milliseconds.
 ///
-/// It takes into account the system clock precision and tries to minimize
+/// It takes into account the system clock.precision and tries to minimize
 /// interference from OS scheduling, context switches, CPU frequency scaling
 /// and more.
 ///
@@ -127,4 +128,62 @@ pub fn microBench(ubench_fn: MicroBenchFn) !MicroBenchmark {
     }
 
     return result;
+}
+
+/// Micro benchmark all public function of type `MicroBenchFn` contained in
+/// struct / namespace `T`.
+///
+/// ```
+/// try zenith.microBenchNamespace(@This());
+/// ```
+///
+/// ```
+/// try zenith.microBenchNamespace(struct {
+///     fn myBench(m: *const zenith.M) void {
+///         for (m.loop()) {
+///             // Use black hole to prevent compiler from optimizing output of
+///             // function.
+///             // Use black box to prevent compiler from optimizing input of
+///             // function.
+///             zenith.blackHole(myFunc(zenith.blackBox(usize, &30)))
+///         }
+///     }
+/// });
+/// ```
+pub fn microBenchNamespace(T: type) !void {
+    const ti = @typeInfo(T).@"struct";
+
+    var buf: [4096]u8 = undefined;
+    var w = std.Progress.lockStderrWriter(buf[0..]);
+    defer std.Progress.unlockStderrWriter();
+
+    try HostInfo.init().print(w);
+
+    inline for (ti.decls) |d| {
+        const v = @field(T, d.name);
+        if (@TypeOf(v) != MicroBenchFn) continue;
+
+        var name = d.name;
+
+        if (std.mem.startsWith(u8, d.name, "benchmark")) {
+            name = d.name[9..];
+        } else if (std.mem.startsWith(u8, d.name, "bench")) {
+            name = d.name[5..];
+        } else if (std.mem.startsWith(u8, d.name, "microBenchmark")) {
+            name = d.name[14..];
+        } else if (std.mem.startsWith(u8, d.name, "microBench")) {
+            name = d.name[10..];
+        }
+
+        if (name.len == 0) name = d.name;
+
+        const result = try microBench(v);
+        const sample = result.sample;
+        try w.print("{s}\t{D}/op\t{} alloc/op ({} bytes/op)\n", .{
+            name,
+            sample.time.ns / result.iter,
+            sample.alloc.count / result.iter,
+            sample.alloc.bytes / result.iter,
+        });
+    }
 }
