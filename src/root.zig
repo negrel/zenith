@@ -18,6 +18,7 @@ pub const blackHole = hint.blackHole;
 const bench = @import("./bench.zig");
 pub const microBench = bench.microBench;
 pub const microBenchNamespace = bench.microBenchNamespace;
+pub const microBenchFn = bench.microBenchFn;
 pub const MicroBenchmark = bench.MicroBenchmark;
 pub const MicroBenchFn = bench.MicroBenchFn;
 pub const M = bench.M;

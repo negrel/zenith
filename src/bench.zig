@@ -6,6 +6,7 @@ const Allocator = @import("./Allocator.zig");
 const metrics = @import("./metrics.zig");
 const clock = @import("./clock.zig");
 const HostInfo = @import("./HostInfo.zig");
+const hint = @import("./hint.zig");
 
 /// Private zenith data part of benchmark context.
 const Private = struct {
@@ -34,7 +35,7 @@ pub const M = struct {
     /// Private field used by zenith.
     private: *const Private,
 
-    /// Memory allocator.
+    /// Memory allocator that should be used by benchmarked code.
     allocator: std.mem.Allocator,
 
     /// Loop returns true while benchmark function should iterate.
@@ -133,11 +134,11 @@ pub fn microBench(ubench_fn: MicroBenchFn) !MicroBenchmark {
 /// Micro benchmark all public function of type `MicroBenchFn` contained in
 /// struct / namespace `T`.
 ///
-/// ```
-/// try zenith.microBenchNamespace(@This());
-/// ```
+/// Examples:
 ///
-/// ```
+/// ```zig
+/// try zenith.microBenchNamespace(@This());
+///
 /// try zenith.microBenchNamespace(struct {
 ///     fn myBench(m: *const zenith.M) void {
 ///         for (m.loop()) {
@@ -186,4 +187,37 @@ pub fn microBenchNamespace(T: type) !void {
             sample.alloc.bytes / result.iter,
         });
     }
+}
+
+/// Generate a function of type `MicroBenchFn` with no setup and clean up.
+///
+/// Example:
+///
+/// ```zig
+/// pub const benchMyFunc: zenith.MicroBenchFn = zenith.microBenchFn(myFunc, .{ arg1, arg2 });
+/// // equivalent to:
+/// pub fn benchMyFunc(m: *const zenith.M) void {
+///     while (m.loop()) {
+///         zenith.blackHole(
+///             myFunc(zenith.blackBox(@TypeOf(arg1), &arg1), @TypeOf(arg2), &arg2)),
+///         );
+///     }
+/// }
+/// ```
+pub fn microBenchFn(func: anytype, args: anytype) MicroBenchFn {
+    const Args = @TypeOf(args);
+
+    return struct {
+        fn ubench(m: *const M) void {
+            while (m.loop()) {
+                var a = args;
+                inline for (@typeInfo(Args).@"struct".fields) |f| {
+                    const v = @field(a, f.name);
+                    @field(a, f.name) = hint.blackBox(@TypeOf(v), &v);
+                }
+
+                hint.blackHole(@call(.always_inline, func, a));
+            }
+        }
+    }.ubench;
 }

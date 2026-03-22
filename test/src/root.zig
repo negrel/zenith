@@ -26,16 +26,7 @@ fn fibIterative(n: usize) usize {
 
 test "zenith.microBench" {
     try zenith.microBenchNamespace(struct {
-        pub fn benchFibRecursive(m: *const zenith.M) void {
-            while (m.loop()) {
-                zenith.blackHole(fibRecursive(zenith.blackBox(usize, &30)));
-            }
-        }
-
-        pub fn benchFibIterative(m: *const zenith.M) void {
-            while (m.loop()) {
-                zenith.blackHole(fibIterative(zenith.blackBox(usize, &30)));
-            }
-        }
+        pub const benchFibIterative = zenith.microBenchFn(fibIterative, .{30});
+        pub const benchFibRecursive = zenith.microBenchFn(fibRecursive, .{30});
     });
 }
