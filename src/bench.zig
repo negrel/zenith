@@ -74,14 +74,19 @@ pub const MicroBenchmark = struct {
 /// with an execution time in the range of few nanoseconds to hundred
 /// milliseconds.
 ///
-/// It takes into account the system clock.precision and tries to minimize
-/// interference from OS scheduling, context switches, CPU frequency scaling
-/// and more.
+/// Low-level function; prefer using microBenchNamespace instead.
 ///
-/// This function samples `ubench_fn` many times and returns the minimum
-/// execution time, that is, the sample with less delay introduced.
+/// Panics if `zenith.options.run` is `false` or if the build is in debug mode.
+///
+/// Accounts for system clock precision and reduces interference from OS
+/// scheduling, context switches, CPU frequency scaling, and similar effects.
+///
+/// Repeatedly runs `ubench_fn` and returns the shortest observed execution
+/// time (the sample with the least added delay).
 pub fn microBench(ubench_fn: MicroBenchFn) !MicroBenchmark {
-    if (!options.run) return error.NoBench;
+    if (!options.run)
+        @panic("zenith.options.run is false, benchmarks disabled. " ++
+            "Set 'run' build options to true to enable benchmarks.");
     if (builtin.mode == .Debug and !options.allow_debug)
         @compileError("you should not run benchmark on non optimized build (set allow_debug options to true)");
 
@@ -132,7 +137,8 @@ pub fn microBench(ubench_fn: MicroBenchFn) !MicroBenchmark {
 }
 
 /// Micro benchmark all public function of type `MicroBenchFn` contained in
-/// struct / namespace `T`.
+/// struct / namespace `T` and prints result to stderr. This function is no-op
+/// if `zenith.options.run` is set to `false`.
 ///
 /// Examples:
 ///
@@ -141,6 +147,9 @@ pub fn microBench(ubench_fn: MicroBenchFn) !MicroBenchmark {
 ///
 /// try zenith.microBenchNamespace(struct {
 ///     fn myBench(m: *const zenith.M) void {
+///         // Setup.
+///         // ...
+///
 ///         for (m.loop()) {
 ///             // Use black hole to prevent compiler from optimizing output of
 ///             // function.
@@ -148,7 +157,13 @@ pub fn microBench(ubench_fn: MicroBenchFn) !MicroBenchmark {
 ///             // function.
 ///             zenith.blackHole(myFunc(zenith.blackBox(usize, &30)))
 ///         }
+///
+///         // Cleanup.
+///         // ...
 ///     }
+///
+///     // If you have no setup/cleanup:
+///     const myBench2 = zenith.microBenchFn(myFunc, .{@as(usize, 30)})
 /// });
 /// ```
 pub fn microBenchNamespace(T: type) !void {
@@ -157,6 +172,11 @@ pub fn microBenchNamespace(T: type) !void {
     var buf: [4096]u8 = undefined;
     var w = std.Progress.lockStderrWriter(buf[0..]);
     defer std.Progress.unlockStderrWriter();
+
+    if (!options.run) {
+        try w.print("zenith benchmarks skipped.\n", .{});
+        return;
+    }
 
     try HostInfo.init().print(w);
 
