@@ -106,7 +106,11 @@ pub fn microBench(ubench_fn: MicroBenchFn) !MicroBenchmark {
         var private: Private = undefined;
         try private.init();
 
-        var alloc = Allocator.init(std.testing.allocator, &private.metrics.alloc);
+        var testing_alloc = @TypeOf(std.testing.allocator_instance).init;
+        var alloc = Allocator.init(
+            testing_alloc.allocator(),
+            &private.metrics.alloc,
+        );
 
         var m = M{
             .private = &private,
@@ -127,7 +131,7 @@ pub fn microBench(ubench_fn: MicroBenchFn) !MicroBenchmark {
             };
         }
 
-        try std.testing.expectEqual(.ok, std.testing.allocator_instance.deinit());
+        try std.testing.expectEqual(.ok, testing_alloc.deinit());
 
         sample_count += 1;
         total_duration_ns += result.sample.time.ns;
