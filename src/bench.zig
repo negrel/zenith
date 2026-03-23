@@ -186,14 +186,14 @@ pub fn microBenchNamespace(T: type) !void {
 
         var name = d.name;
 
-        if (std.mem.startsWith(u8, d.name, "benchmark")) {
-            name = d.name[9..];
-        } else if (std.mem.startsWith(u8, d.name, "bench")) {
-            name = d.name[5..];
-        } else if (std.mem.startsWith(u8, d.name, "microBenchmark")) {
-            name = d.name[14..];
-        } else if (std.mem.startsWith(u8, d.name, "microBench")) {
-            name = d.name[10..];
+        if (std.mem.startsWith(u8, name, "benchmark")) {
+            name = name[9..];
+        } else if (std.mem.startsWith(u8, name, "bench")) {
+            name = name[5..];
+        } else if (std.mem.startsWith(u8, name, "microBenchmark")) {
+            name = name[14..];
+        } else if (std.mem.startsWith(u8, name, "microBench")) {
+            name = name[10..];
         }
 
         if (name.len == 0) name = d.name;
