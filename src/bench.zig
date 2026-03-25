@@ -6,7 +6,7 @@ const Allocator = @import("./Allocator.zig");
 const metrics = @import("./metrics.zig");
 const clock = @import("./clock.zig");
 const HostInfo = @import("./HostInfo.zig");
-const hint = @import("./hint.zig");
+const optim = @import("./optim.zig");
 
 /// Private zenith data part of benchmark context.
 const Private = struct {
@@ -232,18 +232,10 @@ pub fn microBenchNamespace(T: type) !void {
 /// }
 /// ```
 pub fn microBenchFn(func: anytype, args: anytype) MicroBenchFn {
-    const Args = @TypeOf(args);
-
     return struct {
         fn ubench(m: *const M) void {
             while (m.loop()) {
-                var a = args;
-                inline for (@typeInfo(Args).@"struct".fields) |f| {
-                    const v = @field(a, f.name);
-                    @field(a, f.name) = hint.blackBox(@TypeOf(v), &v);
-                }
-
-                hint.blackHole(@call(.always_inline, func, a));
+                optim.voidCall(.always_inline, func, args);
             }
         }
     }.ubench;

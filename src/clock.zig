@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const hint = @import("hint.zig");
+const optim = @import("optim.zig");
 
 /// System clock precision (in nanoseconds) is the smallest nonzero time
 /// interval measurable.
@@ -20,7 +20,7 @@ pub fn measurePrecision() std.time.Timer.Error!u64 {
             } else {
                 timer.reset();
                 for (0..delay_iter) |i| {
-                    hint.blackHole(i);
+                    optim.blackHole(i);
                 }
                 prec_sample = timer.read();
             }

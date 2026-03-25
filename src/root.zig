@@ -11,9 +11,10 @@ test {
     _ = @import("./Allocator.zig");
 }
 
-const hint = @import("./hint.zig");
-pub const blackBox = hint.blackBox;
-pub const blackHole = hint.blackHole;
+const optim = @import("./optim.zig");
+pub const blackBox = optim.blackBox;
+pub const blackHole = optim.blackHole;
+pub const call = optim.call;
 
 const bench = @import("./bench.zig");
 pub const microBench = bench.microBench;
