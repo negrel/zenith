@@ -18,4 +18,6 @@ pub fn blackBox(T: type, v: *const volatile T) T {
 /// Force an evaluation of the expression; this tries to prevent the compiler
 /// from optimizing the computation away even if the result eventually gets
 /// discarded.
-pub const blackHole = std.mem.doNotOptimizeAway;
+pub fn blackHole(val: anytype) void {
+    std.mem.doNotOptimizeAway(val);
+}
