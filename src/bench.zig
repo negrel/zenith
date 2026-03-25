@@ -120,8 +120,11 @@ pub fn microBench(ubench_fn: MicroBenchFn) !MicroBenchmark {
         ubench_fn(&m);
 
         if (private.iter == 0) @panic("benchmark function never called loop()");
-
         const sample = private.metrics.sample();
+
+        if (sample.time.ns < private.clock_prec_ns)
+            @panic("sample time is lower than system clock precision, " ++
+                " check your benchmark code");
 
         if (sample.time.ns < result.sample.time.ns) {
             result = .{
