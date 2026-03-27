@@ -240,3 +240,68 @@ pub fn microBenchFn(func: anytype, args: anytype) MicroBenchFn {
         }
     }.ubench;
 }
+
+test "microBenchNamespaceFib" {
+    var proc = std.process.Child.init(&.{
+        "zig",
+        "build",
+        "test",
+        "-Doptimize=ReleaseFast",
+        "-Dbench",
+    }, std.testing.allocator);
+    proc.cwd = try std.fs.cwd().realpathAlloc(
+        std.testing.allocator,
+        "./examples/fib",
+    );
+    defer std.testing.allocator.free(proc.cwd.?);
+
+    proc.stdout_behavior = .Pipe;
+    proc.stderr_behavior = .Pipe;
+
+    try proc.spawn();
+
+    var buf: [4096]u8 = undefined;
+
+    const read = try proc.stderr.?.readAll(buf[0..]);
+
+    const prefixes: []const []const u8 = &.{
+        "cpu:",
+        "arch:",
+        "features:",
+        "os:",
+        "abi:",
+        "system clock precision:",
+    };
+    var lines = std.mem.splitScalar(u8, buf[0..read], '\n');
+    // Skip first two lines.
+    _ = lines.next().?;
+    _ = lines.next().?;
+
+    var i: usize = 0;
+    while (lines.next()) |l| {
+        defer i += 1;
+
+        var line = l;
+
+        // Skip ansi escape sequence on first line.
+        if (i == 0) line = l[8..];
+
+        if (i < prefixes.len) {
+            try std.testing.expect(std.mem.startsWith(u8, line, prefixes[i]));
+        } else if (i == prefixes.len) {
+            try std.testing.expectEqualStrings("", line);
+        } else if (line.len != 0) {
+            var cols = std.mem.splitScalar(u8, line, '\t');
+            var col = cols.next().?;
+            try std.testing.expect(std.mem.startsWith(u8, col, "Fib"));
+            col = cols.next().?;
+            try std.testing.expect(std.mem.endsWith(u8, col, "s/op"));
+            col = cols.next().?;
+            try std.testing.expect(std.mem.endsWith(u8, col, "bytes/op)"));
+        }
+    }
+    try std.testing.expect(i > prefixes.len + 2);
+
+    const term = try proc.wait();
+    try std.testing.expectEqual(0, term.Exited);
+}

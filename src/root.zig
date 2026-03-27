@@ -9,6 +9,7 @@ test {
     _ = @import("./clock.zig");
     _ = @import("./metrics.zig");
     _ = @import("./Allocator.zig");
+    _ = @import("./bench.zig");
 }
 
 const optim = @import("./optim.zig");
