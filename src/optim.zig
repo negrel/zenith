@@ -12,14 +12,14 @@ const builtin = @import("builtin");
 /// // Work won't be optimized even though it use a constant argument.
 /// std.mem.doNotOptimizeAway(work(blackBox(usize, &128)));
 /// ```
-pub fn blackBox(T: type, v: *const volatile T) T {
+pub inline fn blackBox(T: type, v: *const volatile T) T {
     return v.*;
 }
 
 /// Force an evaluation of the expression; this tries to prevent the compiler
 /// from optimizing the computation away even if the result eventually gets
 /// discarded.
-pub fn blackHole(val: anytype) void {
+pub inline fn blackHole(val: anytype) void {
     std.mem.doNotOptimizeAway(val);
 }
 
