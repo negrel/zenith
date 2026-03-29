@@ -174,6 +174,10 @@ pub fn microBench(ubench_fn: MicroBenchFn) !MicroBenchmark {
 /// });
 /// ```
 pub fn microBenchNamespace(T: type) !void {
+    const static = struct {
+        var host_info_printed = false;
+    };
+
     const ti = @typeInfo(T).@"struct";
 
     var buf: [4096]u8 = undefined;
@@ -185,7 +189,10 @@ pub fn microBenchNamespace(T: type) !void {
         return;
     }
 
-    try HostInfo.init().print(w);
+    if (!static.host_info_printed) {
+        try HostInfo.init().print(w);
+        static.host_info_printed = true;
+    }
 
     inline for (ti.decls) |d| {
         const v = @field(T, d.name);
