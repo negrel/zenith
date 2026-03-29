@@ -64,8 +64,9 @@ pub const MicroBenchFn = fn (*const M) void;
 
 /// Micro benchmark output.
 pub const MicroBenchmark = struct {
-    iter: usize,
-    sample: metrics.Bench.Sample,
+    samples: usize,
+    iterations: usize,
+    metrics: metrics.Bench.Sample,
     clock_prec_ns: u64,
 };
 
@@ -91,17 +92,17 @@ pub fn microBench(ubench_fn: MicroBenchFn) !MicroBenchmark {
         @compileError("you should not run benchmark on non optimized build (set allow_debug options to true)");
 
     var result: MicroBenchmark = .{
-        .iter = std.math.maxInt(usize),
-        .sample = metrics.Bench.Sample.max,
+        .samples = 0,
+        .iterations = std.math.maxInt(usize),
+        .metrics = metrics.Bench.Sample.max,
         .clock_prec_ns = clock.precision(),
     };
 
     var total_duration_ns: usize = 0;
-    var sample_count: usize = 0;
 
-    while (sample_count < options.sample_count_min or
+    while (result.samples < options.sample_count_min or
         ((total_duration_ns / std.time.ns_per_ms) < options.duration_ms_max and
-            sample_count < (options.sample_count_max orelse std.math.maxInt(u32))))
+            result.samples < (options.sample_count_max orelse std.math.maxInt(u32))))
     {
         var private: Private = undefined;
         try private.init();
@@ -126,18 +127,19 @@ pub fn microBench(ubench_fn: MicroBenchFn) !MicroBenchmark {
             @panic("sample time is lower than system clock precision, " ++
                 " check your benchmark code");
 
-        if (sample.time.ns < result.sample.time.ns) {
+        if (sample.time.ns < result.metrics.time.ns) {
             result = .{
-                .sample = sample,
-                .iter = private.iter,
+                .samples = result.samples,
+                .metrics = sample,
+                .iterations = private.iter,
                 .clock_prec_ns = private.clock_prec_ns,
             };
         }
 
         try std.testing.expectEqual(.ok, testing_alloc.deinit());
 
-        sample_count += 1;
-        total_duration_ns += result.sample.time.ns;
+        result.samples += 1;
+        total_duration_ns += result.metrics.time.ns;
     }
 
     return result;
@@ -213,13 +215,14 @@ pub fn microBenchNamespace(T: type) !void {
         if (name.len == 0) name = d.name;
 
         const result = try microBench(v);
-        const sample = result.sample;
-        try w.print("{s}\t{D}/op\t{} alloc/op ({} bytes/op) {} iter\n", .{
+        const sample = result.metrics;
+        try w.print("{s}\t{D}/op\t{} alloc/op ({} bytes/op)\t{} iterations\t {} samples\n", .{
             name,
-            sample.time.ns / result.iter,
-            sample.alloc.count / result.iter,
-            sample.alloc.bytes / result.iter,
-            result.iter,
+            sample.time.ns / result.iterations,
+            sample.alloc.count / result.iterations,
+            sample.alloc.bytes / result.iterations,
+            result.iterations,
+            result.samples,
         });
     }
 }
