@@ -214,11 +214,12 @@ pub fn microBenchNamespace(T: type) !void {
 
         const result = try microBench(v);
         const sample = result.sample;
-        try w.print("{s}\t{D}/op\t{} alloc/op ({} bytes/op)\n", .{
+        try w.print("{s}\t{D}/op\t{} alloc/op ({} bytes/op) {} iter\n", .{
             name,
             sample.time.ns / result.iter,
             sample.alloc.count / result.iter,
             sample.alloc.bytes / result.iter,
+            result.iter,
         });
     }
 }
