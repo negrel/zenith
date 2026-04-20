@@ -186,15 +186,16 @@ pub fn microBenchNamespace(T: type) !void {
     var w = std.Progress.lockStderrWriter(buf[0..]);
     defer std.Progress.unlockStderrWriter();
 
-    if (!options.run) {
-        try w.print("zenith benchmarks skipped.\n", .{});
-        return;
-    }
-
     if (!static.host_info_printed) {
-        try HostInfo.init().print(w);
         static.host_info_printed = true;
+
+        if (options.run) {
+            try HostInfo.init().print(w);
+        } else {
+            try w.print("zenith benchmarks skipped.\n", .{});
+        }
     }
+    if (!options.run) return;
 
     inline for (ti.decls) |d| {
         const v = @field(T, d.name);
