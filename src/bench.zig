@@ -216,7 +216,8 @@ pub fn microBenchNamespace(T: type) !void {
 
         const result = try microBench(v);
         const sample = result.metrics;
-        try w.print("{s}\t{D}/op\t{} alloc/op ({} bytes/op)\t{} iterations\t {} samples\n", .{
+        try w.print("{s}/{s}\t{D}/op\t{} alloc/op ({} bytes/op)\t{} iterations\t {} samples\n", .{
+            @typeName(T),
             name,
             sample.time.ns / result.iterations,
             sample.alloc.count / result.iterations,
