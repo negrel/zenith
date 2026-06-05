@@ -8,24 +8,29 @@ const clock = @import("./clock.zig");
 const HostInfo = @import("./HostInfo.zig");
 const optim = @import("./optim.zig");
 
+const io = std.Options.debug_io;
+
 /// Private zenith data part of benchmark context.
 const Private = struct {
     iter: usize,
     metrics: metrics.Bench,
-    clock_prec_ns: u64,
+    clock_prec: std.Io.Duration,
+    allocator: Allocator,
 
     fn init(self: *Private) !void {
         self.iter = 0;
-        try self.metrics.init();
-        self.clock_prec_ns = clock.precision();
+        try self.metrics.init(io);
+        self.clock_prec = clock.precision(io);
     }
 
     fn loop(self: *Private) bool {
-        self.metrics.stop();
-        if (self.iter > 0 and self.metrics.time.sample.ns > 100 * self.clock_prec_ns)
+        const m = &self.metrics;
+        m.stop(io);
+        if (self.iter > 0 and
+            m.time.sample.dur.nanoseconds > 100 * self.clock_prec.nanoseconds)
             return false;
         self.iter += 1;
-        self.metrics.start();
+        m.start(io);
         return true;
     }
 };
@@ -35,8 +40,9 @@ pub const M = struct {
     /// Private field used by zenith.
     private: *const Private,
 
-    /// Memory allocator that should be used by benchmarked code.
-    allocator: std.mem.Allocator,
+    fn prv(self: *const M) *Private {
+        return @constCast(self.private);
+    }
 
     /// Loop returns true while benchmark function should iterate.
     ///
@@ -55,7 +61,15 @@ pub const M = struct {
     /// }
     /// ```
     pub fn loop(self: *const M) bool {
-        return @constCast(self.private).loop();
+        return self.prv().loop();
+    }
+
+    /// Wrap allocator and returns a new allocator that track allocations.
+    pub fn wrapAllocator(
+        self: *const M,
+        alloc: std.mem.Allocator,
+    ) std.mem.Allocator {
+        self.prv().allocator = .init(alloc, &self.prv().metrics);
     }
 };
 
@@ -67,7 +81,7 @@ pub const MicroBenchmark = struct {
     samples: usize,
     iterations: usize,
     metrics: metrics.Bench.Sample,
-    clock_prec_ns: u64,
+    clock_prec: std.Io.Duration,
 };
 
 /// Measure the performance of `ubench_fn` function. Micro benchmark are
@@ -95,51 +109,40 @@ pub fn microBench(ubench_fn: MicroBenchFn) !MicroBenchmark {
         .samples = 0,
         .iterations = std.math.maxInt(usize),
         .metrics = metrics.Bench.Sample.max,
-        .clock_prec_ns = clock.precision(),
+        .clock_prec = clock.precision(io),
     };
 
-    var total_duration_ns: usize = 0;
+    var total_duration: std.Io.Duration = .zero;
 
     while (result.samples < options.sample_count_min or
-        ((total_duration_ns / std.time.ns_per_ms) < options.duration_ms_max and
+        (@divTrunc(total_duration.nanoseconds, std.time.ns_per_ms) < options.duration_ms_max and
             result.samples < (options.sample_count_max orelse std.math.maxInt(u32))))
     {
         var private: Private = undefined;
         try private.init();
 
-        var testing_alloc = @TypeOf(std.testing.allocator_instance).init;
-        var alloc = Allocator.init(
-            testing_alloc.allocator(),
-            &private.metrics.alloc,
-        );
-
-        var m = M{
-            .private = &private,
-            .allocator = alloc.allocator(),
-        };
+        var m = M{ .private = &private };
 
         ubench_fn(&m);
 
         if (private.iter == 0) @panic("benchmark function never called loop()");
         const sample = private.metrics.sample();
 
-        if (sample.time.ns < private.clock_prec_ns)
+        if (sample.time.dur.nanoseconds < private.clock_prec.nanoseconds)
             @panic("sample time is lower than system clock precision, " ++
                 " check your benchmark code");
 
-        if (sample.time.ns < result.metrics.time.ns) {
+        if (sample.time.dur.nanoseconds < result.metrics.time.dur.nanoseconds) {
             result = .{
                 .samples = result.samples,
                 .metrics = sample,
                 .iterations = private.iter,
-                .clock_prec_ns = private.clock_prec_ns,
+                .clock_prec = private.clock_prec,
             };
         }
 
-        try std.testing.expectEqual(.ok, testing_alloc.deinit());
-
         result.samples += 1;
-        total_duration_ns += result.metrics.time.ns;
+        total_duration.nanoseconds += result.metrics.time.dur.nanoseconds;
     }
 
     return result;
@@ -159,7 +162,7 @@ pub fn microBench(ubench_fn: MicroBenchFn) !MicroBenchmark {
 ///         // Setup.
 ///         // ...
 ///
-///         for (m.loop()) {
+///         while (m.loop()) {
 ///             // Use black hole to prevent compiler from optimizing output of
 ///             // function.
 ///             // Use black box to prevent compiler from optimizing input of
@@ -183,14 +186,15 @@ pub fn microBenchNamespace(T: type) !void {
     const ti = @typeInfo(T).@"struct";
 
     var buf: [4096]u8 = undefined;
-    var w = std.Progress.lockStderrWriter(buf[0..]);
-    defer std.Progress.unlockStderrWriter();
+    var stderr = try io.lockStderr(buf[0..], null);
+    defer io.unlockStderr();
+    var w = &stderr.file_writer.interface;
 
     if (!static.host_info_printed) {
         static.host_info_printed = true;
 
         if (options.run) {
-            try HostInfo.init().print(w);
+            try HostInfo.init(io).print(w);
         } else {
             try w.print("zenith benchmarks skipped.\n", .{});
         }
@@ -217,10 +221,12 @@ pub fn microBenchNamespace(T: type) !void {
 
         const result = try microBench(v);
         const sample = result.metrics;
-        try w.print("{s}/{s}\t{D}/op\t{} alloc/op ({} bytes/op)\t{} iterations\t {} samples\n", .{
+        try w.print("{s}/{s}\t{f}/op\t{} alloc/op ({} bytes/op)\t{} iterations\t {} samples\n", .{
             @typeName(T),
             name,
-            sample.time.ns / result.iterations,
+            std.Io.Duration.fromNanoseconds(
+                @divTrunc(sample.time.dur.nanoseconds, result.iterations),
+            ),
             sample.alloc.count / result.iterations,
             sample.alloc.bytes / result.iterations,
             result.iterations,
@@ -255,27 +261,28 @@ pub fn microBenchFn(func: anytype, args: anytype) MicroBenchFn {
 }
 
 test "microBenchNamespaceFib" {
-    var proc = std.process.Child.init(&.{
-        "zig",
-        "build",
-        "test",
-        "-Doptimize=ReleaseFast",
-        "-Dbench",
-    }, std.testing.allocator);
-    proc.cwd = try std.fs.cwd().realpathAlloc(
-        std.testing.allocator,
+    const cwd = try std.Io.Dir.cwd().realPathFileAlloc(
+        std.testing.io,
         "./examples/fib",
+        std.testing.allocator,
     );
-    defer std.testing.allocator.free(proc.cwd.?);
+    defer std.testing.allocator.free(cwd);
 
-    proc.stdout_behavior = .Pipe;
-    proc.stderr_behavior = .Pipe;
-
-    try proc.spawn();
+    var proc = try std.process.spawn(std.testing.io, .{
+        .argv = &.{
+            "zig",
+            "build",
+            "test",
+            "-Doptimize=ReleaseFast",
+            "-Dbench",
+        },
+        .cwd = .{ .path = cwd },
+        .stdout = .pipe,
+        .stderr = .pipe,
+    });
 
     var buf: [4096]u8 = undefined;
-
-    const read = try proc.stderr.?.readAll(buf[0..]);
+    const read = try proc.stderr.?.readStreaming(std.testing.io, &.{buf[0..]});
 
     const prefixes: []const []const u8 = &.{
         "cpu:",
@@ -291,30 +298,29 @@ test "microBenchNamespaceFib" {
     _ = lines.next().?;
 
     var i: usize = 0;
-    while (lines.next()) |l| {
-        defer i += 1;
-
-        var line = l;
-
-        // Skip ansi escape sequence on first line.
-        if (i == 0) line = l[8..];
-
+    while (lines.next()) |line| {
         if (i < prefixes.len) {
             try std.testing.expect(std.mem.startsWith(u8, line, prefixes[i]));
         } else if (i == prefixes.len) {
             try std.testing.expectEqualStrings("", line);
         } else if (line.len != 0) {
+            if (!std.mem.startsWith(u8, line, "root.test.zenith")) break;
+
             var cols = std.mem.splitScalar(u8, line, '\t');
             var col = cols.next().?;
-            try std.testing.expect(std.mem.startsWith(u8, col, "Fib"));
             col = cols.next().?;
             try std.testing.expect(std.mem.endsWith(u8, col, "s/op"));
             col = cols.next().?;
             try std.testing.expect(std.mem.endsWith(u8, col, "bytes/op)"));
+            col = cols.next().?;
+            try std.testing.expect(std.mem.endsWith(u8, col, "iterations"));
         }
-    }
-    try std.testing.expect(i > prefixes.len + 2);
 
-    const term = try proc.wait();
-    try std.testing.expectEqual(0, term.Exited);
+        i += 1;
+    }
+    // prefixes + 1 one empty line + 2 benchmark
+    try std.testing.expectEqual(prefixes.len + 3, i);
+
+    const term = try proc.wait(std.testing.io);
+    try std.testing.expectEqual(0, term.exited);
 }

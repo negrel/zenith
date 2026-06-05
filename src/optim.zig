@@ -60,37 +60,39 @@ fn fibIter(n: usize) usize {
 
 test "call" {
     if (builtin.mode == .Debug) return;
+    const io = std.testing.io;
 
-    var timer = try std.time.Timer.start();
+    var start = std.Io.Timestamp.now(io, .awake);
 
     // Compiler won't optimize this call.
     const result1 = call(.auto, fibIter, .{40});
-    const dur1 = timer.read();
+    const dur1 = start.untilNow(io, .awake);
 
-    timer.reset();
+    start = std.Io.Timestamp.now(io, .awake);
 
     // Compiler will execute this call at comptime.
     const result2 = fibIter(40);
-    const dur2 = timer.read();
+    const dur2 = start.untilNow(io, .awake);
 
     try std.testing.expect(result1 == result2);
-    try std.testing.expect(dur1 > 10 * dur2);
+    try std.testing.expect(dur1.nanoseconds > 10 * dur2.nanoseconds);
 }
 
 test "voidCall" {
     if (builtin.mode == .Debug) return;
+    const io = std.testing.io;
 
-    var timer = try std.time.Timer.start();
+    var start = std.Io.Timestamp.now(io, .awake);
 
     // Compiler won't optimize this call.
     voidCall(.auto, fibIter, .{40});
-    const dur1 = timer.read();
+    const dur1 = start.untilNow(io, .awake);
 
-    timer.reset();
+    start = std.Io.Timestamp.now(io, .awake);
 
     // Compiler will remove this call since result is discarded.
     _ = call(.auto, fibIter, .{40});
-    const dur2 = timer.read();
+    const dur2 = start.untilNow(io, .awake);
 
-    try std.testing.expect(dur1 > 10 * dur2);
+    try std.testing.expect(dur1.nanoseconds > 10 * dur2.nanoseconds);
 }

@@ -3,31 +3,37 @@ const std = @import("std");
 /// High precision time metric for benchmarks.
 pub const Time = struct {
     started: bool,
-    timer: std.time.Timer,
+    previous: std.Io.Timestamp,
     sample: Sample,
 
     pub const Sample = struct {
-        const max: Sample = .{ .ns = std.math.maxInt(usize) };
+        const max: Sample = .{ .dur = .max };
 
-        ns: usize,
+        dur: std.Io.Duration,
     };
 
-    pub fn init(self: *Time) !void {
-        self.timer = try std.time.Timer.start();
-        self.sample.ns = 0;
+    pub fn init(
+        self: *Time,
+        io: std.Io,
+    ) !void {
+        self.previous = std.Io.Timestamp.now(io, .awake);
+        self.sample.dur = .fromNanoseconds(0);
         self.started = false;
     }
 
-    pub fn start(self: *Time) void {
+    pub fn start(self: *Time, io: std.Io) void {
         if (self.started) return;
         self.started = true;
-        self.timer.reset();
+        self.previous = std.Io.Timestamp.now(io, .awake);
     }
 
-    pub fn stop(self: *Time) void {
+    pub fn stop(self: *Time, io: std.Io) void {
         if (!self.started) return;
         self.started = false;
-        self.sample.ns += self.timer.read();
+        self.sample.dur.nanoseconds += self.previous.untilNow(
+            io,
+            .awake,
+        ).toNanoseconds();
     }
 };
 
@@ -80,18 +86,18 @@ pub const Bench = struct {
         alloc: Alloc.Sample,
     };
 
-    pub fn init(self: *Bench) !void {
-        try self.time.init();
+    pub fn init(self: *Bench, io: std.Io) !void {
+        try self.time.init(io);
         try self.alloc.init();
     }
 
-    pub fn start(self: *Bench) void {
-        self.time.start();
+    pub fn start(self: *Bench, io: std.Io) void {
+        self.time.start(io);
         self.alloc.start();
     }
 
-    pub fn stop(self: *Bench) void {
-        self.time.stop();
+    pub fn stop(self: *Bench, io: std.Io) void {
+        self.time.stop(io);
         self.alloc.stop();
     }
 
@@ -104,23 +110,25 @@ pub const Bench = struct {
 };
 
 test "Time" {
+    const io = std.testing.io;
+
     var m: Time = undefined;
-    try m.init();
+    try m.init(io);
 
-    m.start();
-    std.Thread.sleep(3 * std.time.ns_per_ms);
-    m.stop();
+    m.start(io);
+    try io.sleep(.fromMilliseconds(3), .awake);
+    m.stop(io);
 
-    std.Thread.sleep(10 * std.time.ns_per_ms);
+    try io.sleep(.fromMilliseconds(10), .awake);
 
-    m.start();
-    std.Thread.sleep(3 * std.time.ns_per_ms);
-    m.start(); // extra start (should be ignored)
-    m.stop();
-    m.stop(); // extra stop (should be ignored)
+    m.start(io);
+    try io.sleep(.fromMilliseconds(3), .awake);
+    m.start(io); // extra start (should be ignored)
+    m.stop(io);
+    m.stop(io); // extra stop (should be ignored)
 
-    try std.testing.expect(m.sample.ns > 6 * std.time.ns_per_ms);
-    try std.testing.expect(m.sample.ns < 10 * std.time.ns_per_ms);
+    try std.testing.expect(m.sample.dur.toMilliseconds() >= 6);
+    try std.testing.expect(m.sample.dur.toMilliseconds() < 10);
 }
 
 test "Alloc" {

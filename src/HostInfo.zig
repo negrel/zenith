@@ -8,13 +8,13 @@ const clock = @import("./clock.zig");
 const HostInfo = @This();
 
 target: std.Target,
-clock_prec_ns: u64,
+clock_prec: std.Io.Duration,
 
 /// Initialize host info for current target.
-pub fn init() HostInfo {
+pub fn init(io: std.Io) HostInfo {
     return .{
         .target = builtin.target,
-        .clock_prec_ns = clock.precision(),
+        .clock_prec = clock.precision(io),
     };
 }
 
@@ -32,9 +32,9 @@ pub fn print(self: *const HostInfo, w: *std.Io.Writer) !void {
             try w.print(" {s}", .{feature.name});
         }
     }
-    try w.print("\nos: {s}\nabi: {s}\nsystem clock precision: {D}\n\n", .{
+    try w.print("\nos: {s}\nabi: {s}\nsystem clock precision: {f}\n\n", .{
         @tagName(self.target.os.tag),
         @tagName(self.target.abi),
-        self.clock_prec_ns,
+        self.clock_prec,
     });
 }
