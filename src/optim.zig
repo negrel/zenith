@@ -53,9 +53,9 @@ pub inline fn voidCall(
     blackHole(result);
 }
 
-fn fibIter(n: usize) usize {
+fn fibRecur(n: usize) usize {
     if (n < 2) return n;
-    return fibIter(n - 2) + fibIter(n - 1);
+    return fibRecur(n - 2) + fibRecur(n - 1);
 }
 
 test "call" {
@@ -65,13 +65,13 @@ test "call" {
     var start = std.Io.Timestamp.now(io, .awake);
 
     // Compiler won't optimize this call.
-    const result1 = call(.auto, fibIter, .{40});
+    const result1 = call(.auto, fibRecur, .{40});
     const dur1 = start.untilNow(io, .awake);
 
     start = std.Io.Timestamp.now(io, .awake);
 
     // Compiler will execute this call at comptime.
-    const result2 = fibIter(40);
+    const result2 = fibRecur(40);
     const dur2 = start.untilNow(io, .awake);
 
     try std.testing.expect(result1 == result2);
@@ -85,13 +85,13 @@ test "voidCall" {
     var start = std.Io.Timestamp.now(io, .awake);
 
     // Compiler won't optimize this call.
-    voidCall(.auto, fibIter, .{40});
+    voidCall(.auto, fibRecur, .{40});
     const dur1 = start.untilNow(io, .awake);
 
     start = std.Io.Timestamp.now(io, .awake);
 
     // Compiler will remove this call since result is discarded.
-    _ = call(.auto, fibIter, .{40});
+    _ = call(.auto, fibRecur, .{40});
     const dur2 = start.untilNow(io, .awake);
 
     try std.testing.expect(dur1.nanoseconds > 10 * dur2.nanoseconds);
