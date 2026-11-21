@@ -1,4 +1,46 @@
+//! Benchmark metrics.
+
 const std = @import("std");
+
+const Metrics = @This();
+
+time: Time,
+alloc: Alloc,
+
+/// A group of metrics sample.
+pub const SampleGroup = struct {
+    pub const max: SampleGroup = .{
+        .time = Time.Sample.max,
+        .alloc = Alloc.Sample.max,
+    };
+
+    time: Time.Sample,
+    alloc: Alloc.Sample,
+};
+
+pub fn init(self: *Metrics, io: std.Io) !void {
+    try self.time.init(io);
+    try self.alloc.init();
+}
+
+/// Start / resume metrics recording.
+pub fn start(self: *Metrics, io: std.Io) void {
+    self.time.start(io);
+    self.alloc.start();
+}
+
+/// Stop metrics recording.
+pub fn stop(self: *Metrics, io: std.Io) void {
+    self.time.stop(io);
+    self.alloc.stop();
+}
+
+pub fn sample(self: *const Metrics) SampleGroup {
+    return .{
+        .time = self.time.sample,
+        .alloc = self.alloc.sample,
+    };
+}
 
 /// High precision time metric for benchmarks.
 pub const Time = struct {
@@ -37,6 +79,49 @@ pub const Time = struct {
     }
 };
 
+test Time {
+    var vtable = std.Io.failing.vtable.*;
+    vtable.now = struct {
+        const timestamps: [5]std.Io.Timestamp = .{
+            .fromNanoseconds(0), // init
+            .fromNanoseconds(1), // start
+            .fromNanoseconds(4), // stop
+            .fromNanoseconds(14), // start
+            .fromNanoseconds(17), // stop
+        };
+
+        var count: usize = 0;
+
+        fn now(
+            udata: ?*anyopaque,
+            clock: std.Io.Clock,
+        ) std.Io.Timestamp {
+            defer count += 1;
+            std.debug.assert(udata == null);
+            std.debug.assert(clock == .awake);
+            return timestamps[count];
+        }
+    }.now;
+    const io: std.Io = .{ .userdata = null, .vtable = &vtable };
+
+    var m: Time = undefined;
+    try m.init(io);
+
+    m.start(io);
+    // try io.sleep(.fromMilliseconds(3), .awake);
+    m.stop(io);
+
+    // try io.sleep(.fromMilliseconds(10), .awake);
+
+    m.start(io);
+    // try io.sleep(.fromMilliseconds(3), .awake);
+    m.start(io); // extra start (ignored)
+    m.stop(io);
+    m.stop(io); // extra stop (ignored)
+
+    try std.testing.expect(m.sample.dur.toNanoseconds() == 6);
+}
+
 /// Allocation metrics for benchmarks.
 pub const Alloc = struct {
     started: bool = false,
@@ -71,67 +156,7 @@ pub const Alloc = struct {
     }
 };
 
-/// A collection of benchmark metrics.
-pub const Bench = struct {
-    time: Time,
-    alloc: Alloc,
-
-    pub const Sample = struct {
-        pub const max: Sample = .{
-            .time = Time.Sample.max,
-            .alloc = Alloc.Sample.max,
-        };
-
-        time: Time.Sample,
-        alloc: Alloc.Sample,
-    };
-
-    pub fn init(self: *Bench, io: std.Io) !void {
-        try self.time.init(io);
-        try self.alloc.init();
-    }
-
-    pub fn start(self: *Bench, io: std.Io) void {
-        self.time.start(io);
-        self.alloc.start();
-    }
-
-    pub fn stop(self: *Bench, io: std.Io) void {
-        self.time.stop(io);
-        self.alloc.stop();
-    }
-
-    pub fn sample(self: *const Bench) Sample {
-        return .{
-            .time = self.time.sample,
-            .alloc = self.alloc.sample,
-        };
-    }
-};
-
-test "Time" {
-    const io = std.testing.io;
-
-    var m: Time = undefined;
-    try m.init(io);
-
-    m.start(io);
-    try io.sleep(.fromMilliseconds(3), .awake);
-    m.stop(io);
-
-    try io.sleep(.fromMilliseconds(10), .awake);
-
-    m.start(io);
-    try io.sleep(.fromMilliseconds(3), .awake);
-    m.start(io); // extra start (should be ignored)
-    m.stop(io);
-    m.stop(io); // extra stop (should be ignored)
-
-    try std.testing.expect(m.sample.dur.toMilliseconds() >= 6);
-    try std.testing.expect(m.sample.dur.toMilliseconds() < 10);
-}
-
-test "Alloc" {
+test Alloc {
     var m: Alloc = undefined;
     try m.init();
 
@@ -139,6 +164,8 @@ test "Alloc" {
 
     m.start();
     m.stop();
+
+    m.reportAlloc(200);
 
     m.start();
     m.reportAlloc(256);
