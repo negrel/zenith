@@ -34,9 +34,9 @@ pub inline fn call(
 ) @typeInfo(@TypeOf(func)).@"fn".return_type.? {
     const Args = @TypeOf(args);
     var a = args;
-    inline for (@typeInfo(Args).@"struct".fields) |f| {
-        const v = @field(a, f.name);
-        @field(a, f.name) = blackBox(@TypeOf(v), &v);
+    inline for (@typeInfo(Args).@"struct".field_names) |f_name| {
+        const v = @field(a, f_name);
+        @field(a, f_name) = blackBox(@TypeOf(v), &v);
     }
 
     return @call(modifier, func, a);
@@ -59,7 +59,7 @@ fn fibRecur(n: usize) usize {
 }
 
 test "call" {
-    if (builtin.mode == .Debug) return;
+    if (builtin.mode == .debug) return;
     const io = std.testing.io;
 
     var start = std.Io.Timestamp.now(io, .awake);
@@ -79,7 +79,7 @@ test "call" {
 }
 
 test "voidCall" {
-    if (builtin.mode == .Debug) return;
+    if (builtin.mode == .debug) return;
     const io = std.testing.io;
 
     var start = std.Io.Timestamp.now(io, .awake);

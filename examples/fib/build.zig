@@ -16,6 +16,7 @@ pub fn build(b: *std.Build) void {
     });
 
     const run_mod_tests = b.addRunArtifact(mod_tests);
+    run_mod_tests.has_side_effects = bench;
 
     const test_step = b.step("test", "Run tests");
     test_step.dependOn(&run_mod_tests.step);
@@ -23,8 +24,10 @@ pub fn build(b: *std.Build) void {
     if (b.lazyDependency("zenith", .{
         .target = target,
         .optimize = optimize,
-        .run = bench, // See build options section below.
+        .run = bench,
     })) |dep| {
         mod_tests.root_module.addImport("zenith", dep.module("zenith"));
+        const install = b.addInstallArtifact(mod_tests, .{});
+        test_step.dependOn(&install.step);
     }
 }

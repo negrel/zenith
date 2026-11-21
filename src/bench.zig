@@ -102,7 +102,7 @@ pub fn microBench(ubench_fn: MicroBenchFn) !MicroBenchmark {
     if (!options.run)
         @panic("zenith.options.run is false, benchmarks disabled. " ++
             "Set 'run' build options to true to enable benchmarks.");
-    if (builtin.mode == .Debug and !options.allow_debug)
+    if (builtin.mode == .debug and !options.allow_debug)
         @compileError("you should not run benchmark on non optimized build (set allow_debug options to true)");
 
     var result: MicroBenchmark = .{
@@ -201,11 +201,11 @@ pub fn microBenchNamespace(T: type) !void {
     }
     if (!options.run) return;
 
-    inline for (ti.decls) |d| {
-        const v = @field(T, d.name);
+    inline for (ti.decl_names) |d_name| {
+        const v = @field(T, d_name);
         if (@TypeOf(v) != MicroBenchFn) continue;
 
-        var name = d.name;
+        var name = d_name;
 
         if (std.mem.startsWith(u8, name, "benchmark")) {
             name = name[9..];
@@ -217,7 +217,7 @@ pub fn microBenchNamespace(T: type) !void {
             name = name[10..];
         }
 
-        if (name.len == 0) name = d.name;
+        if (name.len == 0) name = d_name;
 
         const result = try microBench(v);
         const sample = result.metrics;
@@ -254,7 +254,7 @@ pub fn microBenchFn(func: anytype, args: anytype) MicroBenchFn {
     return struct {
         fn ubench(m: *const M) void {
             while (m.loop()) {
-                optim.voidCall(.always_inline, func, args);
+                optim.voidCall(.never_inline, func, args);
             }
         }
     }.ubench;
@@ -277,28 +277,28 @@ test "microBenchNamespaceFib" {
             "-Dbench",
         },
         .cwd = .{ .path = cwd },
-        .stdout = .pipe,
+        .stdout = .inherit,
         .stderr = .pipe,
     });
 
     var buf: [4096]u8 = undefined;
-    const read = try proc.stderr.?.readStreaming(std.testing.io, &.{buf[0..]});
+    var stderr_r = proc.stderr.?.reader(std.testing.io, &buf);
+    var r = &stderr_r.interface;
 
     const prefixes: []const []const u8 = &.{
-        "cpu:",
+        "\x1B[0m" ++ "cpu:",
         "arch:",
         "features:",
         "os:",
         "abi:",
         "system clock precision:",
     };
-    var lines = std.mem.splitScalar(u8, buf[0..read], '\n');
     // Skip first two lines.
-    _ = lines.next().?;
-    _ = lines.next().?;
+    _ = try r.takeDelimiter('\n');
+    _ = try r.takeDelimiter('\n');
 
     var i: usize = 0;
-    while (lines.next()) |line| {
+    while (try r.takeDelimiter('\n')) |line| {
         if (i < prefixes.len) {
             try std.testing.expect(std.mem.startsWith(u8, line, prefixes[i]));
         } else if (i == prefixes.len) {
